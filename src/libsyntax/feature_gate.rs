@@ -523,9 +523,6 @@ declare_features! (
     // Allows the user of associated type bounds.
     (active, associated_type_bounds, "1.34.0", Some(52662), None),
 
-    // Attributes on formal function params.
-    (active, param_attrs, "1.36.0", Some(60406), None),
-
     // Allows calling constructor functions in `const fn`.
     (active, const_constructor, "1.37.0", Some(61456), None),
 
@@ -856,6 +853,8 @@ declare_features! (
     (accepted, underscore_const_names, "1.37.0", Some(54912), None),
     // Allows free and inherent `async fn`s, `async` blocks, and `<expr>.await` expressions.
     (accepted, async_await, "1.39.0", Some(50547), None),
+    // Attributes on formal function params.
+    (accepted, param_attrs, "1.39.0", Some(60406), None),
 
     // -------------------------------------------------------------------------
     // feature-group-end: accepted features
@@ -2431,7 +2430,6 @@ pub fn check_crate(krate: &ast::Crate,
         }
     }
 
-    gate_all!(param_attrs, "attributes on function parameters are unstable");
     gate_all!(let_chains, "`let` expressions in this position are experimental");
     gate_all!(async_closure, "async closures are unstable");
     gate_all!(yields, generators, "yield syntax is experimental");
