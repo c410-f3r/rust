@@ -246,6 +246,10 @@ pub enum ExprKind<'tcx> {
         scrutinee: ExprId,
         arms: Box<[ArmId]>,
     },
+    Let {
+        expr: ExprId,
+        pat: Pat<'tcx>,
+    },
     Block {
         body: Block,
     },

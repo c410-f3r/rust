@@ -137,7 +137,7 @@ fn nested_loops() {
     let a = [42, 1337];
     let mut y = a.iter();
     loop {
-        // x is reused, so don't lint here
+        // y is reused, so don't lint here
         while let Some(_) = y.next() {}
     }
 

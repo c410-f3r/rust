@@ -1,6 +1,7 @@
 use super::utils::{LoopNestVisitor, Nesting};
 use super::WHILE_LET_ON_ITERATOR;
 use clippy_utils::diagnostics::span_lint_and_sugg;
+use clippy_utils::higher;
 use clippy_utils::source::snippet_with_applicability;
 use clippy_utils::ty::implements_trait;
 use clippy_utils::usage::mutated_variables;
@@ -10,24 +11,29 @@ use clippy_utils::{
 use if_chain::if_chain;
 use rustc_errors::Applicability;
 use rustc_hir::intravisit::{walk_block, walk_expr, NestedVisitorMap, Visitor};
-use rustc_hir::{Expr, ExprKind, HirId, MatchSource, Node, PatKind};
+use rustc_hir::{Expr, ExprKind, HirId, Node, PatKind};
 use rustc_lint::LateContext;
 use rustc_middle::hir::map::Map;
 use rustc_span::symbol::sym;
 
 pub(super) fn check(cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) {
-    if let ExprKind::Match(match_expr, arms, MatchSource::WhileLetDesugar) = expr.kind {
-        let pat = &arms[0].pat.kind;
-        if let (&PatKind::TupleStruct(ref qpath, pat_args, _), &ExprKind::MethodCall(method_path, _, method_args, _)) =
-            (pat, &match_expr.kind)
+    if let Some(higher::WhileLet {
+        let_pat,
+        let_expr,
+        if_then,
+        ..
+    }) = higher::WhileLet::hir(expr)
+    {
+        if let (
+            PatKind::TupleStruct(qpath, pat_args, _),
+            ExprKind::MethodCall(method_path, _, &[ref iter_self], _),
+        ) = (&let_pat.kind, &let_expr.kind)
         {
-            let iter_expr = &method_args[0];
-
             // Don't lint when the iterator is recreated on every iteration
             if_chain! {
-                if let ExprKind::MethodCall(..) | ExprKind::Call(..) = iter_expr.kind;
+                if let ExprKind::MethodCall(..) | ExprKind::Call(..) = iter_self.kind;
                 if let Some(iter_def_id) = cx.tcx.get_diagnostic_item(sym::Iterator);
-                if implements_trait(cx, cx.typeck_results().expr_ty(iter_expr), iter_def_id, &[]);
+                if implements_trait(cx, cx.typeck_results().expr_ty(iter_self), iter_def_id, &[]);
                 then {
                     return;
                 }
@@ -35,16 +41,16 @@ pub(super) fn check(cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) {
 
             let lhs_constructor = last_path_segment(qpath);
             if method_path.ident.name == sym::next
-                && is_trait_method(cx, match_expr, sym::Iterator)
+                && is_trait_method(cx, let_expr, sym::Iterator)
                 && lhs_constructor.ident.name == sym::Some
                 && (pat_args.is_empty()
-                    || !is_refutable(cx, pat_args[0])
-                        && !is_used_inside(cx, iter_expr, arms[0].body)
-                        && !is_iterator_used_after_while_let(cx, iter_expr)
-                        && !is_nested(cx, expr, &method_args[0]))
+                    || !is_refutable(cx, &pat_args[0])
+                        && !is_used_inside(cx, iter_self, &if_then)
+                        && !is_iterator_used_after_while_let(cx, iter_self)
+                        && !is_loop_nested(cx, expr, iter_self))
             {
                 let mut applicability = Applicability::MachineApplicable;
-                let iterator = snippet_with_applicability(cx, method_args[0].span, "_", &mut applicability);
+                let iterator = snippet_with_applicability(cx, iter_self.span, "_", &mut applicability);
                 let loop_var = if pat_args.is_empty() {
                     "_".to_string()
                 } else {
@@ -53,7 +59,7 @@ pub(super) fn check(cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>) {
                 span_lint_and_sugg(
                     cx,
                     WHILE_LET_ON_ITERATOR,
-                    expr.span.with_hi(match_expr.span.hi()),
+                    expr.span.with_hi(let_expr.span.hi()),
                     "this loop could be written as a `for` loop",
                     "try",
                     format!("for {} in {}", loop_var, iterator),
@@ -77,38 +83,26 @@ fn is_used_inside<'tcx>(cx: &LateContext<'tcx>, expr: &'tcx Expr<'_>, container:
     false
 }
 
-fn is_iterator_used_after_while_let<'tcx>(cx: &LateContext<'tcx>, iter_expr: &'tcx Expr<'_>) -> bool {
-    let def_id = match path_to_local(iter_expr) {
+fn is_iterator_used_after_while_let<'tcx>(cx: &LateContext<'tcx>, iter_self: &'tcx Expr<'_>) -> bool {
+    let iter_def_id = match path_to_local(iter_self) {
         Some(id) => id,
         None => return false,
     };
     let mut visitor = VarUsedAfterLoopVisitor {
-        def_id,
-        iter_expr_id: iter_expr.hir_id,
+        iter_def_id,
+        iter_self_id: iter_self.hir_id,
         past_while_let: false,
         var_used_after_while_let: false,
     };
-    if let Some(enclosing_block) = get_enclosing_block(cx, def_id) {
+    if let Some(enclosing_block) = get_enclosing_block(cx, iter_def_id) {
         walk_block(&mut visitor, enclosing_block);
     }
     visitor.var_used_after_while_let
 }
 
-fn is_nested(cx: &LateContext<'_>, match_expr: &Expr<'_>, iter_expr: &Expr<'_>) -> bool {
-    if_chain! {
-        if let Some(loop_block) = get_enclosing_block(cx, match_expr.hir_id);
-        let parent_node = cx.tcx.hir().get_parent_node(loop_block.hir_id);
-        if let Some(Node::Expr(loop_expr)) = cx.tcx.hir().find(parent_node);
-        then {
-            return is_loop_nested(cx, loop_expr, iter_expr)
-        }
-    }
-    false
-}
-
-fn is_loop_nested(cx: &LateContext<'_>, loop_expr: &Expr<'_>, iter_expr: &Expr<'_>) -> bool {
+fn is_loop_nested(cx: &LateContext<'_>, loop_expr: &Expr<'_>, iter_self: &Expr<'_>) -> bool {
     let mut id = loop_expr.hir_id;
-    let iter_id = if let Some(id) = path_to_local(iter_expr) {
+    let iter_id = if let Some(id) = path_to_local(iter_self) {
         id
     } else {
         return true;
@@ -145,8 +139,8 @@ fn is_loop_nested(cx: &LateContext<'_>, loop_expr: &Expr<'_>, iter_expr: &Expr<'
 }
 
 struct VarUsedAfterLoopVisitor {
-    def_id: HirId,
-    iter_expr_id: HirId,
+    iter_def_id: HirId,
+    iter_self_id: HirId,
     past_while_let: bool,
     var_used_after_while_let: bool,
 }
@@ -156,10 +150,10 @@ impl<'tcx> Visitor<'tcx> for VarUsedAfterLoopVisitor {
 
     fn visit_expr(&mut self, expr: &'tcx Expr<'_>) {
         if self.past_while_let {
-            if path_to_local_id(expr, self.def_id) {
+            if path_to_local_id(expr, self.iter_def_id) {
                 self.var_used_after_while_let = true;
             }
-        } else if self.iter_expr_id == expr.hir_id {
+        } else if self.iter_self_id == expr.hir_id {
             self.past_while_let = true;
         }
         walk_expr(self, expr);

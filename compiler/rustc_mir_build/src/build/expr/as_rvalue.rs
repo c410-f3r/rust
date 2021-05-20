@@ -283,6 +283,7 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             | ExprKind::LogicalOp { .. }
             | ExprKind::Call { .. }
             | ExprKind::Field { .. }
+            | ExprKind::Let { .. }
             | ExprKind::Deref { .. }
             | ExprKind::Index { .. }
             | ExprKind::VarRef { .. }

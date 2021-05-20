@@ -232,6 +232,9 @@ impl HirEqInterExpr<'_, '_, '_> {
             (&ExprKind::If(ref lc, ref lt, ref le), &ExprKind::If(ref rc, ref rt, ref re)) => {
                 self.eq_expr(lc, rc) && self.eq_expr(&**lt, &**rt) && both(le, re, |l, r| self.eq_expr(l, r))
             },
+            (&ExprKind::Let(ref lp, ref le, _), &ExprKind::Let(ref rp, ref re, _)) => {
+                self.eq_pat(lp, rp) && self.eq_expr(le, re)
+            },
             (&ExprKind::Lit(ref l), &ExprKind::Lit(ref r)) => l.node == r.node,
             (&ExprKind::Loop(ref lb, ref ll, ref lls, _), &ExprKind::Loop(ref rb, ref rl, ref rls, _)) => {
                 lls == rls && self.eq_block(lb, rb) && both(ll, rl, |l, r| l.ident.name == r.ident.name)
@@ -690,6 +693,10 @@ impl<'a, 'tcx> SpanlessHash<'a, 'tcx> {
                     }
                 }
             },
+            ExprKind::Let(ref pat, ref expr, _) => {
+                self.hash_expr(expr);
+                self.hash_pat(pat);
+            },
             ExprKind::LlvmInlineAsm(..) | ExprKind::Err => {},
             ExprKind::Lit(ref l) => {
                 l.node.hash(&mut self.s);
@@ -701,8 +708,6 @@ impl<'a, 'tcx> SpanlessHash<'a, 'tcx> {
                 }
             },
             ExprKind::If(ref cond, ref then, ref else_opt) => {
-                let c: fn(_, _, _) -> _ = ExprKind::If;
-                c.hash(&mut self.s);
                 self.hash_expr(cond);
                 self.hash_expr(&**then);
                 if let Some(ref e) = *else_opt {
