@@ -68,17 +68,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                 };
 
                 let join_block = this.cfg.start_new_block();
-                this.cfg.terminate(
-                    then_blk,
-                    source_info,
-                    TerminatorKind::Goto { target: join_block },
-                );
-                this.cfg.terminate(
-                    else_blk,
-                    source_info,
-                    TerminatorKind::Goto { target: join_block },
-                );
-
+                this.cfg.goto(then_blk, source_info, join_block);
+                this.cfg.goto(else_blk, source_info, join_block);
                 join_block.unit()
             }
             ExprKind::Let { ref pat, expr } => {
@@ -134,53 +125,47 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
                     end_block.unit()
                 }
             }
-            ExprKind::LogicalOp { op, lhs, rhs } => {
+            ExprKind::LogicalOp { op: log_op, lhs, rhs } => {
+                // stcct = ShorT CirCuiT
+                //
                 // And:
                 //
-                // [block: If(lhs)] -true-> [else_block: dest = (rhs)]
+                // [block: If(lhs)] -true-> [else_blk: dest = (rhs)]
                 //        | (false)
-                //  [shortcurcuit_block: dest = false]
+                //  [stct_blk: dest = false]
                 //
                 // Or:
                 //
-                // [block: If(lhs)] -false-> [else_block: dest = (rhs)]
+                // [block: If(lhs)] -false-> [else_blk: dest = (rhs)]
                 //        | (true)
-                //  [shortcurcuit_block: dest = true]
+                //  [stct_blk: dest = true]
 
-                let (shortcircuit_block, mut else_block, join_block) = (
-                    this.cfg.start_new_block(),
-                    this.cfg.start_new_block(),
-                    this.cfg.start_new_block(),
-                );
+                let local_scope = this.local_scope();
 
-                let lhs = unpack!(block = this.as_local_operand(block, &this.thir[lhs]));
-                let blocks = match op {
-                    LogicalOp::And => (else_block, shortcircuit_block),
-                    LogicalOp::Or => (shortcircuit_block, else_block),
+                let (destination_lit, stcct_blk, mut else_blk) = {
+                    let expr = &this.thir[lhs];
+                    let blks = this.then_else_blocks(block, expr, local_scope, source_info);
+                    match log_op {
+                        LogicalOp::And => (ty::Const::from_bool(this.tcx, false), blks.1, blks.0),
+                        LogicalOp::Or => (ty::Const::from_bool(this.tcx, true), blks.0, blks.1),
+                    }
                 };
-                let term = TerminatorKind::if_(this.tcx, lhs, blocks.0, blocks.1);
-                this.cfg.terminate(block, source_info, term);
 
                 this.cfg.push_assign_constant(
-                    shortcircuit_block,
+                    stcct_blk,
                     source_info,
                     destination,
-                    Constant {
-                        span: expr_span,
-                        user_ty: None,
-                        literal: match op {
-                            LogicalOp::And => ty::Const::from_bool(this.tcx, false).into(),
-                            LogicalOp::Or => ty::Const::from_bool(this.tcx, true).into(),
-                        },
-                    },
+                    Constant { span: expr_span, user_ty: None, literal: destination_lit.into() },
                 );
-                this.cfg.goto(shortcircuit_block, source_info, join_block);
 
-                let rhs = unpack!(else_block = this.as_local_operand(else_block, &this.thir[rhs]));
-                this.cfg.push_assign(else_block, source_info, destination, Rvalue::Use(rhs));
-                this.cfg.goto(else_block, source_info, join_block);
+                let rhs = unpack!(else_blk = this.as_local_operand(else_blk, &this.thir[rhs]));
+                this.cfg.push_assign(else_blk, source_info, destination, Rvalue::Use(rhs));
 
-                join_block.unit()
+                let join_blk = this.cfg.start_new_block();
+                this.cfg.goto(stcct_blk, source_info, join_blk);
+                this.cfg.goto(else_blk, source_info, join_blk);
+
+                join_blk.unit()
             }
             ExprKind::Loop { body } => {
                 // [block]

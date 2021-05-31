@@ -20,7 +20,6 @@
 #![feature(const_generics)]
 //~^ WARN the feature `const_generics` is incomplete
 #![feature(let_chains)] // Avoid inflating `.stderr` with overzealous gates in this test.
-//~^ WARN the feature `let_chains` is incomplete
 
 #![allow(irrefutable_let_patterns)]
 

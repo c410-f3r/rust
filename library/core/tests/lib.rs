@@ -91,6 +91,7 @@ mod hash;
 mod intrinsics;
 mod iter;
 mod lazy;
+mod let_chains;
 mod macros;
 mod manually_drop;
 mod mem;

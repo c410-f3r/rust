@@ -684,7 +684,6 @@ pub const INCOMPLETE_FEATURES: &[Symbol] = &[
     sym::impl_trait_in_bindings,
     sym::generic_associated_types,
     sym::const_generics,
-    sym::let_chains,
     sym::raw_dylib,
     sym::const_evaluatable_checked,
     sym::const_trait_impl,

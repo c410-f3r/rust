@@ -46,14 +46,32 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
         let expr_span = expr.span;
 
         match expr.kind {
+            ExprKind::LogicalOp { op, lhs, rhs } => {
+                let expr = match op {
+                    LogicalOp::And => &this.thir[lhs],
+                    LogicalOp::Or => &this.thir[rhs],
+                };
+                this.then_else_blocks(block, expr, scope, source_info)
+
+                //let (shortcircuit_block, else_block) =
+                //    (this.cfg.start_new_block(), this.cfg.start_new_block());
+                //let lhs = unpack!(block = this.as_local_operand(block, &this.thir[lhs]));
+                //let blocks = match op {
+                //    LogicalOp::And => (else_block, shortcircuit_block),
+                //    LogicalOp::Or => (shortcircuit_block, else_block),
+                //};
+                //let term = TerminatorKind::if_(this.tcx, lhs, blocks.0, blocks.1);
+                //this.cfg.terminate(block, source_info, term);
+                //(blocks.0, blocks.1)
+            }
             ExprKind::Scope { region_scope, lint_level, value } => {
                 let region_scope = (region_scope, source_info);
                 let then_block;
                 let else_block = unpack!(
                     then_block = this.in_scope(region_scope, lint_level, |this| {
-                        let (then_block, else_block) =
-                            this.then_else_blocks(block, &this.thir[value], scope, source_info);
-                        then_block.and(else_block)
+                        let value_expr = &this.thir[value];
+                        let blocks = this.then_else_blocks(block, value_expr, scope, source_info);
+                        blocks.0.and(blocks.1)
                     })
                 );
                 (then_block, else_block)
