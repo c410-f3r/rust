@@ -28,8 +28,6 @@ impl<'a> Parser<'a> {
             NonterminalKind::Expr => {
                 token.can_begin_expr()
                 // This exception is here for backwards compatibility.
-                && !token.is_keyword(kw::Let)
-                // This exception is here for backwards compatibility.
                 && !token.is_keyword(kw::Const)
             }
             NonterminalKind::Ty => token.can_begin_type(),

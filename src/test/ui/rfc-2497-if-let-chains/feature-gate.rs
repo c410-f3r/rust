@@ -95,12 +95,9 @@ fn _macros() {
     use_expr!((let 0 = 1 && 0 == 0));
     //~^ ERROR `let` expressions in this position are unstable [E0658]
     use_expr!((let 0 = 1));
-    //~^ ERROR `let` expressions in this position are unstable [E0658]
     #[cfg(FALSE)] (let 0 = 1);
     //~^ ERROR `let` expressions in this position are unstable [E0658]
     use_expr!(let 0 = 1);
-    //~^ ERROR no rules expected the token `let`
-    // ^--- FIXME(53667): Consider whether `Let` can be added to `ident_can_begin_expr`.
 }
 
 fn main() {}

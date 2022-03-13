@@ -1,12 +1,3 @@
-error: no rules expected the token `let`
-  --> $DIR/feature-gate.rs:69:15
-   |
-LL |     macro_rules! use_expr {
-   |     --------------------- when calling this macro
-...
-LL |     use_expr!(let 0 = 1);
-   |               ^^^ no rules expected this token in macro call
-
 error[E0658]: `if let` guards are experimental
   --> $DIR/feature-gate.rs:7:12
    |
@@ -58,7 +49,7 @@ LL |         () if let Range { start: _, end: _ } = (true..true) && false => {}
    = help: you can write `if matches!(<expr>, <pattern>)` instead of `if let <pattern> = <expr>`
 
 error[E0658]: `if let` guards are experimental
-  --> $DIR/feature-gate.rs:65:12
+  --> $DIR/feature-gate.rs:66:12
    |
 LL |         () if let 0 = 1 => {}
    |            ^^^^^^^^^^^^
@@ -66,6 +57,20 @@ LL |         () if let 0 = 1 => {}
    = note: see issue #51114 <https://github.com/rust-lang/rust/issues/51114> for more information
    = help: add `#![feature(if_let_guard)]` to the crate attributes to enable
    = help: you can write `if matches!(<expr>, <pattern>)` instead of `if let <pattern> = <expr>`
+
+error[E0658]: `if let` guards are experimental
+  --> $DIR/feature-gate.rs:54:20
+   |
+LL |                 () if $e => {}
+   |                    ^^
+...
+LL |     use_expr!(let 0 = 1);
+   |     -------------------- in this macro invocation
+   |
+   = note: see issue #51114 <https://github.com/rust-lang/rust/issues/51114> for more information
+   = help: add `#![feature(if_let_guard)]` to the crate attributes to enable
+   = help: you can write `if matches!(<expr>, <pattern>)` instead of `if let <pattern> = <expr>`
+   = note: this error originates in the macro `use_expr` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0658]: `let` expressions in this position are unstable
   --> $DIR/feature-gate.rs:10:16
@@ -194,7 +199,7 @@ LL |         () if let Range { start: _, end: _ } = (true..true) && false => {}
    = help: add `#![feature(let_chains)]` to the crate attributes to enable
 
 error[E0658]: `let` expressions in this position are unstable
-  --> $DIR/feature-gate.rs:59:16
+  --> $DIR/feature-gate.rs:60:16
    |
 LL |     use_expr!((let 0 = 1 && 0 == 0));
    |                ^^^^^^^^^
@@ -203,7 +208,7 @@ LL |     use_expr!((let 0 = 1 && 0 == 0));
    = help: add `#![feature(let_chains)]` to the crate attributes to enable
 
 error[E0658]: `let` expressions in this position are unstable
-  --> $DIR/feature-gate.rs:61:16
+  --> $DIR/feature-gate.rs:62:16
    |
 LL |     use_expr!((let 0 = 1));
    |                ^^^^^^^^^

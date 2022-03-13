@@ -52,6 +52,7 @@ fn _macros() {
         ($e:expr) => {
             match () {
                 () if $e => {}
+                //~^ ERROR `if let` guards are experimental
                 _ => {}
             }
         }
@@ -67,7 +68,6 @@ fn _macros() {
         _ => {}
     }
     use_expr!(let 0 = 1);
-    //~^ ERROR no rules expected the token `let`
 }
 
 fn main() {}
